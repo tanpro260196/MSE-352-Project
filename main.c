@@ -14,7 +14,7 @@
 #include "inc/tm4c123gh6pm.h"
 #include "driverlib/timer.h"
 #include "driverlib/interrupt.h"
-//We’ll use a 55Hz base frequency to control the servo.
+//Weâ€™ll use a 55Hz base frequency to control the servo.
 #define PWM_FREQUENCY 20000
 volatile double duty;
 volatile double ui32Load;
@@ -107,14 +107,17 @@ int main(void)
     ADC0_SSCTL3_R |= 6; /* take one sample at a time, set flag at 1st sample */
     ADC0_ACTSS_R |= 8; /* enable ADC0 sequencer 3 */
 
-    //Timer Config
+    //Timer Config. Periodic mode.
     SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER0);
     TimerConfigure(TIMER0_BASE, TIMER_CFG_PERIODIC);
-    //Calculate timer delay/frequency.
+    //Calculate timer delay/frequency. SysCtlClockGet() = 1 second
     ui32Period = SysCtlClockGet() / 0.5;
-    //Set Timer_0A to the above frequency.
+    //Set Timer_0A to the above frequency. Minus 1 because it count to 0.
     TimerLoadSet(TIMER0_BASE, TIMER_A, ui32Period - 1);
-    //Enable Interupt related to TimerOA
+    
+    
+    
+    //Enable Interupt related to TimerOA. We don't need to use int rightnow but I will leave it here just in case.
     IntEnable(INT_TIMER0A);
     //Set interupt to happens when Timer0A time out.
     TimerIntEnable(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
@@ -125,10 +128,11 @@ int main(void)
 
 
     ADC0_PSSI_R |= 8; /* start a conversion sequence 3 */
-    while ((ADC0_RIS_R & 0x08) == 0)
-        ; /* wait for conversion complete */
+    while ((ADC0_RIS_R & 0x08) == 0); /* wait for conversion complete */
     result = ADC0_SSFIFO3_R; /* read conversion result */
     ADC0_ISC_R = 8; /* clear completion flag */
+    
+    //This if-else is here to initialize our period calculation
     if (result > 2000)
     {
         initial_signal_value = 0;
@@ -137,15 +141,20 @@ int main(void)
     {
         initial_signal_value = 1;
     }
+    //
+    
     while (1)
     {
-
+        //RCT is just use for debug purposes. Ignore it.
         RCT = TimerValueGet(TIMER0_BASE, TIMER_A);
+        //
+        //Read value from the fan's sensor and save it to 'result'
         ADC0_PSSI_R |= 8; /* start a conversion sequence 3 */
-        while ((ADC0_RIS_R & 0x08) == 0)
-            ; /* wait for conversion complete */
+        while ((ADC0_RIS_R & 0x08) == 0); /* wait for conversion complete */
         result = ADC0_SSFIFO3_R; /* read conversion result */
         ADC0_ISC_R = 8; /* clear completion flag */
+        
+        //Convert result to 0 and 1.
         if (result > 2000)
         {
             comparision_sensor_value = 0;
@@ -155,26 +164,35 @@ int main(void)
             comparision_sensor_value = 1;
         }
 
-
+        //Check it the signal change compare to previous loop.
         if (comparision_sensor_value != initial_signal_value)
         {
+            //if it does. Check the edge count.
             if (count == 0)
             {
+                //if it is the first edge. Enable timer and record the timer value
                 TimerEnable(TIMER0_BASE, TIMER_A);
                 initial_timer_value = TimerValueGet(TIMER0_BASE, TIMER_A);
             }
+            //Increase count by 1
             count++;
             if (count == 5)
             {
+                //if it is the final edge of a period. Record the timer value.
                 final_timer_value = TimerValueGet(TIMER0_BASE, TIMER_A);
+                //Reset the count variable.
                 count = 0;
+                //calculate period in clock cycle and rpm.
                 period = (-final_timer_value + initial_timer_value);
                 rpm = round(60/(period/SysCtlClockGet()));
+                //this var is not use for anything. Will be deleted later.
                 rounded = rpm;
+                //reset timer
                 TimerLoadSet(TIMER0_BASE, TIMER_A, ui32Period - 1);
             }
         }
-
+        
+        //Save the sensor result for next loop.
         if (result > 2000)
         {
             initial_signal_value = 0;
@@ -186,7 +204,6 @@ int main(void)
 
 
         //0x00 = pressing
-
         if (GPIOPinRead(GPIO_PORTF_BASE, GPIO_PIN_4) == 0x00)
         {
             ui8Adjust = ui8Adjust - 0.1;
@@ -206,20 +223,23 @@ int main(void)
             }
             PWMPulseWidthSet(PWM1_BASE, PWM_OUT_0, ui8Adjust * ui32Load / 1000);
         }
-
+        //Calculate duty cycle. For debug purposes only.
         duty = 100 * ((ui8Adjust * ui32Load / 1000) / (ui32Load));
-
-D = rounded % 10;
-CD =rounded % 100;
-BCD =rounded % 1000;
-C = (CD - D)/10;
-B = (BCD-CD)/100;
-A = (rounded - BCD)/1000;
-SysCtlDelay(5000);
+        
+        //Break the rpm value into digits.
+        D = rounded % 10;
+        CD =rounded % 100;
+        BCD =rounded % 1000;
+        C = (CD - D)/10;
+        B = (BCD-CD)/100;
+        A = (rounded - BCD)/1000;
+        //Delay for the loop to account for button bouncing. However it will affect the accuracy of our calculation. Therefore we use a very low delay and very high step number.
+        SysCtlDelay(5000);
 
     }
 }
 
+//this do nothing as we don't use interupt atm.
 void Timer0IntHandler(void)
 {
     // Clear the timer interrupt
