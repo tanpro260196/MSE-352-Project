@@ -14,7 +14,7 @@
 #include "inc/tm4c123gh6pm.h"
 #include "driverlib/timer.h"
 #include "driverlib/interrupt.h"
-//Weâ€™ll use a 55Hz base frequency to control the servo.
+//We’ll use a 55Hz base frequency to control the servo.
 #define PWM_FREQUENCY 20000
 volatile double duty;
 volatile double ui32Load;
@@ -32,12 +32,15 @@ volatile double final_timer_value;
 volatile double period;
 volatile double rpm;
 volatile int rounded;
-volatile int A;
-volatile int CD;
-volatile int BCD;
-volatile int B;
-volatile int C;
-volatile int D;
+volatile int w;
+volatile int yz;
+volatile int xyz;
+volatile int x;
+volatile int y;
+volatile int z;
+void first(int Input);
+void second(int Input);
+void third(int input);
 int main(void)
 {
     //PWM variables
@@ -60,6 +63,22 @@ int main(void)
     GPIOPinTypeADC(GPIO_PORTD_BASE, GPIO_PIN_3);
     //Specify pin D0 to the PWM_0, module 1.
     GPIOPinConfigure(GPIO_PD0_M1PWM0);
+
+
+        //Enable All Remaining GPIO
+        SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA); //peripheral A
+        SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOB); //peripheral B
+        SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOE); //peripheral E
+
+
+        //Since we don't know what pin we will use. Let's just enable everything lol.
+        GPIOPinTypeGPIOOutput(GPIO_PORTA_BASE, GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_6 | GPIO_PIN_7);
+        GPIOPinTypeGPIOOutput(GPIO_PORTB_BASE, GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_7);
+        GPIOPinTypeGPIOOutput(GPIO_PORTD_BASE, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_6 | GPIO_PIN_7);
+        GPIOPinTypeGPIOOutput(GPIO_PORTE_BASE, GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5);
+        GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3);
+
+
 
     //Unlock the switches. Locked by default.
     HWREG(GPIO_PORTF_BASE + GPIO_O_LOCK) = GPIO_LOCK_KEY;
@@ -175,6 +194,16 @@ int main(void)
         }
 
 
+        if (comparision_sensor_value == initial_signal_value && ui8Adjust >= 750 && rpm < 300)
+                {
+                    rpm = 0;
+                    rounded = 0;
+                }
+        if (comparision_sensor_value == initial_signal_value && ui8Adjust <= 70 && rpm < 300)
+                        {
+                            rpm = 0;
+                            rounded = 0;
+                        }
         //0x00 = pressing
 
         if (GPIOPinRead(GPIO_PORTF_BASE, GPIO_PIN_4) == 0x00)
@@ -199,12 +228,230 @@ int main(void)
 
         duty = 100 * ((ui8Adjust * ui32Load / 1000) / (ui32Load));
 
-D = rounded % 10;
-CD =rounded % 100;
-BCD =rounded % 1000;
-C = (CD - D)/10;
-B = (BCD-CD)/100;
-A = (rounded - BCD)/1000;
+        z = rounded % 10;
+        yz = rounded % 100;
+        xyz = rounded % 1000;
+        y = (yz - z) / 10;
+        x = (xyz - yz) / 100;
+        w = (rounded - xyz) / 1000;
+        SysCtlDelay(5000);
+
+        if (w > 0)
+        {
+            first(w);
+            second(x);
+            third(y);
+        }
+        else if (w == 0)
+        {
+            first(x);
+            second(y);
+            third(z);
+        }
 SysCtlDelay(5000);
+    }
+}
+
+void first(int Input) //PD2,PB3,PE4,PE5
+{
+    switch (Input)
+    {
+    case 0:
+        GPIOPinWrite(GPIO_PORTD_BASE, GPIO_PIN_2, 0x00);  //lsb
+        GPIOPinWrite(GPIO_PORTB_BASE, GPIO_PIN_3, 0x00);
+        GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_4, 0x00);
+        GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_5, 0x00);  //msb
+        break;
+    case 1:
+        GPIOPinWrite(GPIO_PORTD_BASE, GPIO_PIN_2, GPIO_PIN_2);  //lsb
+        GPIOPinWrite(GPIO_PORTB_BASE, GPIO_PIN_3, 0x00);
+        GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_4, 0x00);
+        GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_5, 0x00);  //msb
+        break;
+    case 2:
+        GPIOPinWrite(GPIO_PORTD_BASE, GPIO_PIN_2, 0x00);  //lsb
+        GPIOPinWrite(GPIO_PORTB_BASE, GPIO_PIN_3, GPIO_PIN_3);
+        GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_4, 0x00);
+        GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_5, 0x00);  //msb
+        break;
+    case 3:
+        GPIOPinWrite(GPIO_PORTD_BASE, GPIO_PIN_2, GPIO_PIN_2);  //lsb
+        GPIOPinWrite(GPIO_PORTB_BASE, GPIO_PIN_3, GPIO_PIN_3);
+        GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_4, 0x00);
+        GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_5, 0x00);  //msb
+        break;
+    case 4:
+        GPIOPinWrite(GPIO_PORTD_BASE, GPIO_PIN_2, 0x00);  //lsb
+        GPIOPinWrite(GPIO_PORTB_BASE, GPIO_PIN_3, 0x00);
+        GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_4, GPIO_PIN_4);
+        GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_5, 0x00);  //msb
+        break;
+    case 5:
+        GPIOPinWrite(GPIO_PORTD_BASE, GPIO_PIN_2, GPIO_PIN_2);  //lsb
+        GPIOPinWrite(GPIO_PORTB_BASE, GPIO_PIN_3, 0x00);
+        GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_4, GPIO_PIN_4);
+        GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_5, 0x00);  //msb
+        break;
+    case 6:
+        GPIOPinWrite(GPIO_PORTD_BASE, GPIO_PIN_2, 0x00);  //lsb
+        GPIOPinWrite(GPIO_PORTB_BASE, GPIO_PIN_3, GPIO_PIN_3);
+        GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_4, GPIO_PIN_4);
+        GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_5, 0x00);  //msb
+        break;
+    case 7:
+        GPIOPinWrite(GPIO_PORTD_BASE, GPIO_PIN_2, GPIO_PIN_2);  //lsb
+        GPIOPinWrite(GPIO_PORTB_BASE, GPIO_PIN_3, GPIO_PIN_3);
+        GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_4, GPIO_PIN_4);
+        GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_5, 0x00);  //msb
+        break;
+    case 8:
+        GPIOPinWrite(GPIO_PORTD_BASE, GPIO_PIN_2, 0x00);  //lsb
+        GPIOPinWrite(GPIO_PORTB_BASE, GPIO_PIN_3, 0x00);
+        GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_4, 0x00);
+        GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_5, GPIO_PIN_5);  //msb
+        break;
+    case 9:
+        GPIOPinWrite(GPIO_PORTD_BASE, GPIO_PIN_2, GPIO_PIN_2);  //lsb
+        GPIOPinWrite(GPIO_PORTB_BASE, GPIO_PIN_3, 0x00);
+        GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_4, 0x00);
+        GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_5, GPIO_PIN_5);  //msb
+        break;
+    }
+}
+
+void second(int Input) //PE1, PE2, PB4, PA5
+{
+    switch (Input)
+    {
+    case 0:
+        GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_1, 0x00);  //lsb
+        GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_2, 0x00);
+        GPIOPinWrite(GPIO_PORTB_BASE, GPIO_PIN_4, 0x00);
+        GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_5, 0x00);  //msb
+        break;
+    case 1:
+        GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_1, GPIO_PIN_1);  //lsb
+        GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_2, 0x00);
+        GPIOPinWrite(GPIO_PORTB_BASE, GPIO_PIN_4, 0x00);
+        GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_5, 0x00);  //msb
+        break;
+    case 2:
+        GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_1, 0x00);  //lsb
+        GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_2, GPIO_PIN_2);
+        GPIOPinWrite(GPIO_PORTB_BASE, GPIO_PIN_4, 0x00);
+        GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_5, 0x00);  //msb
+        break;
+    case 3:
+        GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_1, GPIO_PIN_1);  //lsb
+        GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_2, GPIO_PIN_2);
+        GPIOPinWrite(GPIO_PORTB_BASE, GPIO_PIN_4, 0x00);
+        GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_5, 0x00);  //msb
+        break;
+    case 4:
+        GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_1, 0x00);  //lsb
+        GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_2, 0x00);
+        GPIOPinWrite(GPIO_PORTB_BASE, GPIO_PIN_4, GPIO_PIN_4);
+        GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_5, 0x00);  //msb
+        break;
+    case 5:
+        GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_1, GPIO_PIN_1);  //lsb
+        GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_2, 0x00);
+        GPIOPinWrite(GPIO_PORTB_BASE, GPIO_PIN_4, GPIO_PIN_4);
+        GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_5, 0x00);  //msb
+        break;
+    case 6:
+        GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_1, 0x00);  //lsb
+        GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_2, GPIO_PIN_2);
+        GPIOPinWrite(GPIO_PORTB_BASE, GPIO_PIN_4, GPIO_PIN_4);
+        GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_5, 0x00);  //msb
+        break;
+    case 7:
+        GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_1, GPIO_PIN_1);  //lsb
+        GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_2, GPIO_PIN_2);
+        GPIOPinWrite(GPIO_PORTB_BASE, GPIO_PIN_4, GPIO_PIN_4);
+        GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_5, 0x00);  //msb
+        break;
+    case 8:
+        GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_1, 0x00);  //lsb
+        GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_2, 0x00);
+        GPIOPinWrite(GPIO_PORTB_BASE, GPIO_PIN_4, 0x00);
+        GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_5, GPIO_PIN_5);  //msb
+        break;
+    case 9:
+        GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_1, GPIO_PIN_1);  //lsb
+        GPIOPinWrite(GPIO_PORTE_BASE, GPIO_PIN_2, 0x00);
+        GPIOPinWrite(GPIO_PORTB_BASE, GPIO_PIN_4, 0x00);
+        GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_5, GPIO_PIN_5);  //msb
+        break;
+
+    }
+
+}
+
+void third(int Input) //PA4, PA3, PD6, PD7
+{
+    switch (Input)
+    {
+    case 0:
+        GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_4, 0x00);
+        GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_3, 0x00);
+        GPIOPinWrite(GPIO_PORTD_BASE, GPIO_PIN_6, 0x00);
+        GPIOPinWrite(GPIO_PORTD_BASE, GPIO_PIN_7, 0x00);
+        break;
+    case 1:
+        GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_4, GPIO_PIN_4);
+        GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_3, 0x00);
+        GPIOPinWrite(GPIO_PORTD_BASE, GPIO_PIN_6, 0x00);
+        GPIOPinWrite(GPIO_PORTD_BASE, GPIO_PIN_7, 0x00);
+        break;
+    case 2:
+        GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_4, 0x00);
+        GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_3, GPIO_PIN_3);
+        GPIOPinWrite(GPIO_PORTD_BASE, GPIO_PIN_6, 0x00);
+        GPIOPinWrite(GPIO_PORTD_BASE, GPIO_PIN_7, 0x00);
+        break;
+    case 3:
+        GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_4, GPIO_PIN_4);
+        GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_3, GPIO_PIN_3);
+        GPIOPinWrite(GPIO_PORTD_BASE, GPIO_PIN_6, 0x00);
+        GPIOPinWrite(GPIO_PORTD_BASE, GPIO_PIN_7, 0x00);
+        break;
+    case 4:
+        GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_4, 0x00);
+        GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_3, 0x00);
+        GPIOPinWrite(GPIO_PORTD_BASE, GPIO_PIN_6, GPIO_PIN_6);
+        GPIOPinWrite(GPIO_PORTD_BASE, GPIO_PIN_7, 0x00);
+        break;
+    case 5:
+        GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_4, GPIO_PIN_4);
+        GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_3, 0x00);
+        GPIOPinWrite(GPIO_PORTD_BASE, GPIO_PIN_6, GPIO_PIN_6);
+        GPIOPinWrite(GPIO_PORTD_BASE, GPIO_PIN_7, 0x00);
+        break;
+    case 6:
+        GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_4, 0x00);
+        GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_3, GPIO_PIN_3);
+        GPIOPinWrite(GPIO_PORTD_BASE, GPIO_PIN_6, GPIO_PIN_6);
+        GPIOPinWrite(GPIO_PORTD_BASE, GPIO_PIN_7, 0x00);
+        break;
+    case 7:
+        GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_4, GPIO_PIN_4);
+        GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_3, GPIO_PIN_3);
+        GPIOPinWrite(GPIO_PORTD_BASE, GPIO_PIN_6, GPIO_PIN_6);
+        GPIOPinWrite(GPIO_PORTD_BASE, GPIO_PIN_7, 0x00);
+        break;
+    case 8:
+        GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_4, 0x00);
+        GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_3, 0x00);
+        GPIOPinWrite(GPIO_PORTD_BASE, GPIO_PIN_6, 0x00);
+        GPIOPinWrite(GPIO_PORTD_BASE, GPIO_PIN_7, GPIO_PIN_7);
+        break;
+    case 9:
+        GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_4, GPIO_PIN_4);
+        GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_3, 0x00);
+        GPIOPinWrite(GPIO_PORTD_BASE, GPIO_PIN_6, 0x00);
+        GPIOPinWrite(GPIO_PORTD_BASE, GPIO_PIN_7, GPIO_PIN_7);
+        break;
+
     }
 }
