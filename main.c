@@ -32,7 +32,8 @@ volatile double final_timer_value;
 volatile double period;
 volatile double rpm;
 volatile int rounded;
-volatile double voltage;
+volatile double require_rpm;
+volatile double error_percent;
 volatile int w;
 volatile int yz;
 volatile int xyz;
@@ -249,20 +250,38 @@ int main(void)
                             rounded = 0;
                         }
         //0x00 = pressing
-
         if (GPIOPinRead(GPIO_PORTF_BASE, GPIO_PIN_4) == 0x00)
-        {
-            ui8Adjust = ui8Adjust - 0.1;
-            if (ui8Adjust < 10)
             {
-                ui8Adjust = 10;
+                require_rpm = require_rpm - 0.5;
+                if (require_rpm < 0)
+                {
+                    require_rpm = 0;
+                }
+                //Set the new pulse width
+            }
+            if (GPIOPinRead(GPIO_PORTF_BASE, GPIO_PIN_0) == 0x00)
+            {
+                require_rpm += 0.5;
+                if (require_rpm > 2400)
+                {
+                    require_rpm = 1000;
+                }
+            }
+
+
+        if (rpm < require_rpm)
+        {
+            ui8Adjust = ui8Adjust - 1;
+            if (ui8Adjust < 100)
+            {
+                ui8Adjust = 100;
             }
             //Set the new pulse width
             PWMPulseWidthSet(PWM1_BASE, PWM_OUT_0, ui8Adjust * ui32Load / 1000);
         }
-        if (GPIOPinRead(GPIO_PORTF_BASE, GPIO_PIN_0) == 0x00)
+        if (rpm > require_rpm)
         {
-            ui8Adjust += 0.1;
+            ui8Adjust += 1;
             if (ui8Adjust > 1000)
             {
                 ui8Adjust = 1000;
@@ -270,8 +289,8 @@ int main(void)
             PWMPulseWidthSet(PWM1_BASE, PWM_OUT_0, ui8Adjust * ui32Load / 1000);
         }
 
-        duty = 100 * ((ui8Adjust * ui32Load / 1000) / (ui32Load));
-
+        duty = 100 - 100 * ((ui8Adjust * ui32Load / 1000) / (ui32Load));
+        error_percent = 100*((require_rpm-rpm)/require_rpm);
         z = rounded % 10;
         yz = rounded % 100;
         xyz = rounded % 1000;
