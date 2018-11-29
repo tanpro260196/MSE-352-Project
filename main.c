@@ -49,6 +49,7 @@ int main(void)
     // "volatile" means will stay in memory no matter what
 
     ui8Adjust = 100;
+    require_rpm = 1000;
     //System Clock 40MHZ
     SysCtlClockSet(SYSCTL_SYSDIV_5 | SYSCTL_USE_PLL | SYSCTL_OSC_MAIN | SYSCTL_XTAL_16MHZ);
     //PWM Clock is 40MHZ/64
@@ -73,7 +74,7 @@ int main(void)
         SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOE); //peripheral E
         SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOC); //peripheral C
 
-        //Since we don't know what pin we will use. Let's just enable everything lol.
+        //Since we don't know what pin we will use.
         GPIOPinTypeGPIOOutput(GPIO_PORTA_BASE, GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_6 | GPIO_PIN_7);
         GPIOPinTypeGPIOOutput(GPIO_PORTB_BASE, GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_7);
         GPIOPinTypeGPIOOutput(GPIO_PORTC_BASE, GPIO_PIN_4);
