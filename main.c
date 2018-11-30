@@ -42,17 +42,17 @@ volatile double rpmAvg = 0;
 volatile double rpmSum = 0;
 volatile double countAvg = 0;
 volatile double voltage;
-volatile int delay_count;
-volatile int count_2 =0;
+volatile double voltage_sum;
+volatile int voltage_count;
+volatile double kp = 0.05;
+volatile double error;
 void first(int Input);
 void second(int Input);
 void third(int input);
 int main(void)
 {
+    ui8Adjust = 100;
     //PWM variables
-    rpm = 2400;
-    require_rpm = 1500;
-    ui8Adjust = (require_rpm/2400)*1000 -150;
     //System Clock 40MHZ
     SysCtlClockSet(
             SYSCTL_SYSDIV_5 | SYSCTL_USE_PLL | SYSCTL_OSC_MAIN
@@ -100,12 +100,6 @@ int main(void)
     HWREG(GPIO_PORTF_BASE + GPIO_O_CR) |= 0x01;
     HWREG(GPIO_PORTF_BASE + GPIO_O_LOCK) = 0;
 
-    //Set these switches as input.
-    GPIODirModeSet(GPIO_PORTF_BASE, GPIO_PIN_4 | GPIO_PIN_0, GPIO_DIR_MODE_IN);
-    //Check for when the switch is pressed or hold.
-    GPIOPadConfigSet(GPIO_PORTF_BASE, GPIO_PIN_4 | GPIO_PIN_0,
-    GPIO_STRENGTH_2MA,
-                     GPIO_PIN_TYPE_STD_WPU);
 
     //Set PWM clock. In this case is 40MHZ/64 = 625KHZ
     ui32PWMClock = SysCtlClockGet() / 64;
@@ -148,20 +142,28 @@ int main(void)
     /* enable clocks */
     SYSCTL_RCGCGPIO_R |= 0x10; /* enable clock to GPIOE (AIN0 is on PE3) */
     SYSCTL_RCGCADC_R |= 2; /* enable clock to ADC0 */
-    /* initialize PE3 for AIN0 input  */
-    GPIO_PORTE_AFSEL_R |= 10; /* enable alternate function */
-    GPIO_PORTE_DEN_R &= ~10; /* disable digital function */
-    GPIO_PORTE_AMSEL_R |= 10; /* enable analog function */
+    /* initialize PE2 for AIN1 input  */
+    GPIO_PORTE_AFSEL_R |= 4; /* enable alternate function */
+    GPIO_PORTE_DEN_R &= ~4; /* disable digital function */
+    GPIO_PORTE_AMSEL_R |= 4; /* enable analog function */
     /* initialize ADC0 */
     ADC1_ACTSS_R &= ~8; /* disable SS3 during configuration */
     ADC1_EMUX_R &= ~0xF000; /* software trigger conversion */
-    ADC1_SSMUX3_R = 1; /* get input from channel 0 */
+    ADC1_SSMUX3_R = 1; /* get input from channel 1 */
     ADC1_SSCTL3_R |= 6; /* take one sample at a time, set flag at 1st sample */
     ADC1_ACTSS_R |= 8; /* enable ADC0 sequencer 3 */
     //End ADC1 Config
 
+    //Read from ADC1
+    ADC1_PSSI_R |= 8; /* start a conversion sequence 3 */
+    while ((ADC1_RIS_R & 0x08) == 0)
+        ; /* wait for conversion complete */
+    voltage = ADC1_SSFIFO3_R; /* read conversion result */
+    ADC1_ISC_R = 8; /* clear completion flag */
 
+    require_rpm = 2400*(voltage/4095);
 
+    error_percent = abs(100 * ((require_rpm - rpm) / require_rpm));
 
     //Timer Config
     SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER0);
@@ -188,20 +190,23 @@ int main(void)
 
     while (1)
     {
+
         if (ui8Adjust >= 750 && rpm < 300)
         {
             rpm = 0;
             rounded = 0;
+            rpmAvg = 0;
         }
         if (ui8Adjust <= 70 && rpm < 300)
         {
             rpm = 0;
             rounded = 0;
+            rpmAvg = 0;
+            
         }
         //Read from ADC0
         ADC0_PSSI_R |= 8; /* start a conversion sequence 3 */
-        while ((ADC0_RIS_R & 0x08) == 0)
-            ; /* wait for conversion complete */
+        while ((ADC0_RIS_R & 0x08) == 0); /* wait for conversion complete */
         result = ADC0_SSFIFO3_R; /* read conversion result */
         ADC0_ISC_R = 8; /* clear completion flag */
 
@@ -210,8 +215,16 @@ int main(void)
         ADC1_PSSI_R |= 8; /* start a conversion sequence 3 */
         while ((ADC1_RIS_R & 0x08) == 0)
             ; /* wait for conversion complete */
-        voltage = ADC1_SSFIFO3_R; /* read conversion result */
+        voltage_sum = voltage_sum + ADC1_SSFIFO3_R; /* read conversion result */
         ADC1_ISC_R = 8; /* clear completion flag */
+        voltage_count++;
+        if (voltage_count == 50)
+        {
+            voltage = voltage_sum/50;
+            require_rpm = 2400*(voltage/4095);
+            voltage_sum = 0;
+            voltage_count = 0;
+        }
 
 
 
@@ -234,7 +247,6 @@ int main(void)
                 initial_timer_value = TimerValueGet(TIMER0_BASE, TIMER_A);
             }
             count++;
-            count_2++;
             if (count == 5)
             {
                 final_timer_value = TimerValueGet(TIMER0_BASE, TIMER_A);
@@ -252,6 +264,23 @@ int main(void)
                     rpmSum = 0;
                 }
                 //************Take Average of 3 Samples********************************************
+                //************PROPORTIONAL SPEED CONTROL********************************************
+
+                error = ((require_rpm - rpmAvg) / 2400) * 1000;
+                error *= kp;
+                ui8Adjust = ui8Adjust - error;
+                if (ui8Adjust < 100)
+                {
+                    ui8Adjust = 100;
+                }
+                if (ui8Adjust > 1000)
+                {
+                    ui8Adjust = 1000;
+                }
+
+                PWMPulseWidthSet(PWM1_BASE, PWM_OUT_0,ui8Adjust * ui32Load / 1000);
+
+                //************PROPORTIONAL SPEED CONTROL********************************************
                 TimerLoadSet(TIMER0_BASE, TIMER_A, ui32Period - 1);
             }
         }
@@ -263,67 +292,8 @@ int main(void)
         {
             initial_signal_value = 1;
         }
-        if (count_2 == 5)
-        {
-            count_2 = 0;
-            error_percent = abs(100 * ((require_rpm - rpmAvg) / require_rpm));
-            if ((error_percent >= 5) && (delay_count <= 10))
-            {
-                delay_count = 0;
-                if (rpm < require_rpm)
-                {
-                    ui8Adjust -= 1;
-                    if (ui8Adjust < 100)
-                    {
-                        ui8Adjust = 100;
-                    }
-                    //Set the new pulse width
-                    PWMPulseWidthSet(PWM1_BASE, PWM_OUT_0,
-                                     ui8Adjust * ui32Load / 1000);
-                }
-                if (rpm > require_rpm)
-                {
-                    ui8Adjust += 1;
-                    if (ui8Adjust > 1000)
-                    {
-                        ui8Adjust = 1000;
-                    }
-                    PWMPulseWidthSet(PWM1_BASE, PWM_OUT_0,
-                                     ui8Adjust * ui32Load / 1000);
-                }
-            }
-            else if ((!(delay_count > 20)) && (error_percent <= 5) && (require_rpm > 1200))
-            {
-                delay_count++;
-            }
-            else if ((!(delay_count > 20)) && (error_percent <= 10) && (require_rpm <= 1200))
-            {
-                delay_count++;
-            }
-            else if ((error_percent > 10) && (require_rpm > 1200))
-            {delay_count = 0;}
-            else if ((error_percent > 20) && (require_rpm <= 1200))
-            {delay_count = 0;}
-        }
-        //0x00 = pressing
-        if (GPIOPinRead(GPIO_PORTF_BASE, GPIO_PIN_4) == 0x00)
-        {
-            require_rpm = require_rpm - 0.1;
-            delay_count = 0;
-            if (require_rpm < 0)
-            {
-                require_rpm = 0;
-            }
-        }
-        if (GPIOPinRead(GPIO_PORTF_BASE, GPIO_PIN_0) == 0x00)
-        {
-            require_rpm += 0.1;
-            delay_count = 0;
-            if (require_rpm > 2400)
-            {
-                require_rpm = 2400;
-            }
-        }
+
+        error_percent = abs(100 * ((require_rpm - rpm) / require_rpm));
         duty = 100 - 100 * ((ui8Adjust * ui32Load / 1000) / (ui32Load));
         z = rounded % 10;
         yz = rounded % 100;
@@ -345,7 +315,6 @@ int main(void)
             second(y);
             third(z);
         }
-        SysCtlDelay(1000);
     }
 }
 
