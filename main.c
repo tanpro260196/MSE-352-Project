@@ -21,10 +21,8 @@ volatile double ui32Load;
 volatile double ui32PWMClock;
 volatile double ui8Adjust;
 volatile double result;
-volatile double RCT;
 volatile double ui32Period;
 volatile double initial_signal_value;
-volatile double i;
 volatile double comparision_sensor_value;
 volatile double count;
 volatile double initial_timer_value;
@@ -40,18 +38,24 @@ volatile int xyz;
 volatile int x;
 volatile int y;
 volatile int z;
+volatile double rpmAvg = 0;
+volatile double rpmSum = 0;
+volatile double countAvg = 0;
+volatile int delay_count;
+volatile int count_2 =0;
 void first(int Input);
 void second(int Input);
 void third(int input);
 int main(void)
 {
     //PWM variables
-    // "volatile" means will stay in memory no matter what
-
-    ui8Adjust = 100;
-    require_rpm = 1000;
+    rpm = 2400;
+    require_rpm = 1500;
+    ui8Adjust = (require_rpm/2400)*1000 -150;
     //System Clock 40MHZ
-    SysCtlClockSet(SYSCTL_SYSDIV_5 | SYSCTL_USE_PLL | SYSCTL_OSC_MAIN | SYSCTL_XTAL_16MHZ);
+    SysCtlClockSet(
+            SYSCTL_SYSDIV_5 | SYSCTL_USE_PLL | SYSCTL_OSC_MAIN
+                    | SYSCTL_XTAL_16MHZ);
     //PWM Clock is 40MHZ/64
     SysCtlPWMClockSet(SYSCTL_PWMDIV_64);
 
@@ -67,22 +71,28 @@ int main(void)
     //Specify pin D0 to the PWM_0, module 1.
     GPIOPinConfigure(GPIO_PD0_M1PWM0);
 
+    //Enable All Remaining GPIO
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA); //peripheral A
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOB); //peripheral B
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOE); //peripheral E
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOC); //peripheral C
 
-        //Enable All Remaining GPIO
-        SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA); //peripheral A
-        SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOB); //peripheral B
-        SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOE); //peripheral E
-        SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOC); //peripheral C
-
-        //Since we don't know what pin we will use.
-        GPIOPinTypeGPIOOutput(GPIO_PORTA_BASE, GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_6 | GPIO_PIN_7);
-        GPIOPinTypeGPIOOutput(GPIO_PORTB_BASE, GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_7);
-        GPIOPinTypeGPIOOutput(GPIO_PORTC_BASE, GPIO_PIN_4);
-        GPIOPinTypeGPIOOutput(GPIO_PORTD_BASE, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_6 | GPIO_PIN_7);
-        GPIOPinTypeGPIOOutput(GPIO_PORTE_BASE, GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5);
-        GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3);
-
-
+    //Since we don't know what pin we will use.
+    GPIOPinTypeGPIOOutput(
+            GPIO_PORTA_BASE,
+            GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_6
+                    | GPIO_PIN_7);
+    GPIOPinTypeGPIOOutput(GPIO_PORTB_BASE,
+                          GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_7);
+    GPIOPinTypeGPIOOutput(GPIO_PORTC_BASE, GPIO_PIN_4);
+    GPIOPinTypeGPIOOutput(
+            GPIO_PORTD_BASE,
+            GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_6 | GPIO_PIN_7);
+    GPIOPinTypeGPIOOutput(
+            GPIO_PORTE_BASE,
+            GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5);
+    GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE,
+                          GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3);
 
     //Unlock the switches. Locked by default.
     HWREG(GPIO_PORTF_BASE + GPIO_O_LOCK) = GPIO_LOCK_KEY;
@@ -113,10 +123,6 @@ int main(void)
     PWMOutputState(PWM1_BASE, PWM_OUT_0_BIT, true);
     //Start PWM generator 0, module 1.
     PWMGenEnable(PWM1_BASE, PWM_GEN_0);
-
-
-
-
 //ADC0 Config
     /* enable clocks */
     SYSCTL_RCGCGPIO_R |= 0x10; /* enable clock to GPIOE (AIN0 is on PE3) */
@@ -134,34 +140,6 @@ int main(void)
     ADC0_SSCTL3_R |= 6; /* take one sample at a time, set flag at 1st sample */
     ADC0_ACTSS_R |= 8; /* enable ADC0 sequencer 3 */
 //End ADC0 Config
-
-
-//ADC1 Config
-    /* enable clocks */
-        SYSCTL_RCGCGPIO_R |= 0x10; /* enable clock to GPIOE (AIN0 is on PE3) */
-        SYSCTL_RCGCADC_R |= 2; /* enable clock to ADC0 */
-
-        /* initialize PE3 for AIN0 input  */
-        GPIO_PORTE_AFSEL_R |= 10; /* enable alternate function */
-        GPIO_PORTE_DEN_R &= ~10; /* disable digital function */
-        GPIO_PORTE_AMSEL_R |= 10; /* enable analog function */
-
-        /* initialize ADC0 */
-        ADC1_ACTSS_R &= ~8; /* disable SS3 during configuration */
-        ADC1_EMUX_R &= ~0xF000; /* software trigger conversion */
-        ADC1_SSMUX3_R = 1; /* get input from channel 0 */
-        ADC1_SSCTL3_R |= 6; /* take one sample at a time, set flag at 1st sample */
-        ADC1_ACTSS_R |= 8; /* enable ADC0 sequencer 3 */
-//End ADC1 Config
-
-
-
-
-
-
-
-
-
 
     //Timer Config
     SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER0);
@@ -183,23 +161,27 @@ int main(void)
     {
         initial_signal_value = 1;
     }
+
+
+
     while (1)
     {
-
-        RCT = TimerValueGet(TIMER0_BASE, TIMER_A);
-
+        if (ui8Adjust >= 750 && rpm < 300)
+        {
+            rpm = 0;
+            rounded = 0;
+        }
+        if (ui8Adjust <= 70 && rpm < 300)
+        {
+            rpm = 0;
+            rounded = 0;
+        }
         //Read from ADC0
         ADC0_PSSI_R |= 8; /* start a conversion sequence 3 */
         while ((ADC0_RIS_R & 0x08) == 0)
             ; /* wait for conversion complete */
         result = ADC0_SSFIFO3_R; /* read conversion result */
         ADC0_ISC_R = 8; /* clear completion flag */
-        //Read from ADC1
-        ADC1_PSSI_R |= 8; /* start a conversion sequence 3 */
-        while ((ADC1_RIS_R & 0x08) == 0)
-            ; /* wait for conversion complete */
-        voltage = ADC1_SSFIFO3_R; /* read conversion result */
-        ADC1_ISC_R = 8; /* clear completion flag */
 
         if (result > 2000)
         {
@@ -210,7 +192,6 @@ int main(void)
             comparision_sensor_value = 1;
         }
 
-
         if (comparision_sensor_value != initial_signal_value)
         {
             if (count == 0)
@@ -219,17 +200,27 @@ int main(void)
                 initial_timer_value = TimerValueGet(TIMER0_BASE, TIMER_A);
             }
             count++;
+            count_2++;
             if (count == 5)
             {
                 final_timer_value = TimerValueGet(TIMER0_BASE, TIMER_A);
                 count = 0;
                 period = (-final_timer_value + initial_timer_value);
-                rpm = round(60/(period/SysCtlClockGet()));
-                rounded = rpm;
+                rpm = round(60 / (period / SysCtlClockGet()));
+                //************Take Average of 3 Samples********************************************
+                countAvg++;
+                rpmSum = rpmSum + rpm;
+                if (countAvg == 3)
+                {
+                    rpmAvg = rpmSum / 3;
+                    countAvg = 0;
+                    rounded = rpmAvg;
+                    rpmSum = 0;
+                }
+                //************Take Average of 3 Samples********************************************
                 TimerLoadSet(TIMER0_BASE, TIMER_A, ui32Period - 1);
             }
         }
-
         if (result > 2000)
         {
             initial_signal_value = 0;
@@ -238,60 +229,68 @@ int main(void)
         {
             initial_signal_value = 1;
         }
-
-
-        if (comparision_sensor_value == initial_signal_value && ui8Adjust >= 750 && rpm < 300)
+        if (count_2 == 5)
+        {
+            count_2 = 0;
+            error_percent = abs(100 * ((require_rpm - rpmAvg) / require_rpm));
+            if ((error_percent >= 5) && (delay_count <= 10))
+            {
+                delay_count = 0;
+                if (rpm < require_rpm)
                 {
-                    rpm = 0;
-                    rounded = 0;
+                    ui8Adjust -= 1;
+                    if (ui8Adjust < 100)
+                    {
+                        ui8Adjust = 100;
+                    }
+                    //Set the new pulse width
+                    PWMPulseWidthSet(PWM1_BASE, PWM_OUT_0,
+                                     ui8Adjust * ui32Load / 1000);
                 }
-        if (comparision_sensor_value == initial_signal_value && ui8Adjust <= 70 && rpm < 300)
-                        {
-                            rpm = 0;
-                            rounded = 0;
-                        }
+                if (rpm > require_rpm)
+                {
+                    ui8Adjust += 1;
+                    if (ui8Adjust > 1000)
+                    {
+                        ui8Adjust = 1000;
+                    }
+                    PWMPulseWidthSet(PWM1_BASE, PWM_OUT_0,
+                                     ui8Adjust * ui32Load / 1000);
+                }
+            }
+            else if ((!(delay_count > 20)) && (error_percent <= 5) && (require_rpm > 1200))
+            {
+                delay_count++;
+            }
+            else if ((!(delay_count > 20)) && (error_percent <= 10) && (require_rpm <= 1200))
+            {
+                delay_count++;
+            }
+            else if ((error_percent > 10) && (require_rpm > 1200))
+            {delay_count = 0;}
+            else if ((error_percent > 20) && (require_rpm <= 1200))
+            {delay_count = 0;}
+        }
         //0x00 = pressing
         if (GPIOPinRead(GPIO_PORTF_BASE, GPIO_PIN_4) == 0x00)
-            {
-                require_rpm = require_rpm - 0.5;
-                if (require_rpm < 0)
-                {
-                    require_rpm = 0;
-                }
-                //Set the new pulse width
-            }
-            if (GPIOPinRead(GPIO_PORTF_BASE, GPIO_PIN_0) == 0x00)
-            {
-                require_rpm += 0.5;
-                if (require_rpm > 2400)
-                {
-                    require_rpm = 1000;
-                }
-            }
-
-
-        if (rpm < require_rpm)
         {
-            ui8Adjust = ui8Adjust - 1;
-            if (ui8Adjust < 100)
+            require_rpm = require_rpm - 0.1;
+            delay_count = 0;
+            if (require_rpm < 0)
             {
-                ui8Adjust = 100;
+                require_rpm = 0;
             }
-            //Set the new pulse width
-            PWMPulseWidthSet(PWM1_BASE, PWM_OUT_0, ui8Adjust * ui32Load / 1000);
         }
-        if (rpm > require_rpm)
+        if (GPIOPinRead(GPIO_PORTF_BASE, GPIO_PIN_0) == 0x00)
         {
-            ui8Adjust += 1;
-            if (ui8Adjust > 1000)
+            require_rpm += 0.1;
+            delay_count = 0;
+            if (require_rpm > 2400)
             {
-                ui8Adjust = 1000;
+                require_rpm = 2400;
             }
-            PWMPulseWidthSet(PWM1_BASE, PWM_OUT_0, ui8Adjust * ui32Load / 1000);
         }
-
         duty = 100 - 100 * ((ui8Adjust * ui32Load / 1000) / (ui32Load));
-        error_percent = 100*((require_rpm-rpm)/require_rpm);
         z = rounded % 10;
         yz = rounded % 100;
         xyz = rounded % 1000;
@@ -312,7 +311,7 @@ int main(void)
             second(y);
             third(z);
         }
-SysCtlDelay(5000);
+        SysCtlDelay(1000);
     }
 }
 
