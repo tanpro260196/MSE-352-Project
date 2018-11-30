@@ -202,7 +202,7 @@ int main(void)
             rpm = 0;
             rounded = 0;
             rpmAvg = 0;
-            
+
         }
         //Read from ADC0
         ADC0_PSSI_R |= 8; /* start a conversion sequence 3 */
@@ -269,6 +269,10 @@ int main(void)
                 error = ((require_rpm - rpmAvg) / 2400) * 1000;
                 error *= kp;
                 ui8Adjust = ui8Adjust - error;
+                if (require_rpm >= 2390)
+                {
+                    ui8Adjust = 100;
+                }
                 if (ui8Adjust < 100)
                 {
                     ui8Adjust = 100;
