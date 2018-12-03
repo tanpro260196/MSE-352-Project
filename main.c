@@ -14,7 +14,7 @@
 #include "inc/tm4c123gh6pm.h"
 #include "driverlib/timer.h"
 #include "driverlib/interrupt.h"
-//We’ll use a 55Hz base frequency to control the servo.
+//We'll use a 20KHz base frequency to control the servo.
 #define PWM_FREQUENCY 20000
 volatile double duty;
 volatile double ui32Load;
@@ -104,7 +104,7 @@ int main(void)
 
     //Set PWM clock. In this case is 40MHZ/64 = 625KHZ
     ui32PWMClock = SysCtlClockGet() / 64;
-    //Divide the PWM clock by the desired frequency (55Hz) to determine the count to be loaded into the Load register. Then
+    //Divide the PWM clock by the desired frequency (20KHz) to determine the count to be loaded into the Load register. Then
     //subtract 1 since the counter down-counts to zero.
     ui32Load = (ui32PWMClock / PWM_FREQUENCY);
     //Configure module 1 PWM generator 0 as a down-counter and load the count value.
@@ -181,6 +181,7 @@ int main(void)
     result = ADC0_SSFIFO3_R; /* read conversion result */
     ADC0_ISC_R = 8; /* clear completion flag */
 
+    //Convert result to 0/1
     if (result > 2000)
     {
         initial_signal_value = 0;
@@ -315,6 +316,7 @@ int main(void)
         }
         //Percent error duh
         error_percent = abs(100 * ((require_rpm - rpm) / require_rpm));
+        //Restart fan from 0 RPM
         if ((rpmAvg == 0) & (require_rpm >=30))
         {
             error = ((require_rpm - rpmAvg) / 2400) * 1000;
