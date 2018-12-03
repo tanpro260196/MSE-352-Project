@@ -46,13 +46,14 @@ volatile double voltage_sum;
 volatile int voltage_count;
 volatile double kp = 0.05;
 volatile double error;
+volatile int start_again;
 void first(int Input);
 void second(int Input);
 void third(int input);
 int main(void)
 {
     //PWM variables
-    ui8Adjust = 100;
+    ui8Adjust = 1000;
     //System Clock 40MHZ
     SysCtlClockSet(
             SYSCTL_SYSDIV_5 | SYSCTL_USE_PLL | SYSCTL_OSC_MAIN
@@ -118,7 +119,7 @@ int main(void)
     PWMOutputState(PWM1_BASE, PWM_OUT_0_BIT, true);
     //Start PWM generator 0, module 1.
     PWMGenEnable(PWM1_BASE, PWM_GEN_0);
-    
+
     //ADC0 Config
     /* enable clocks */
     SYSCTL_RCGCGPIO_R |= 0x10; /* enable clock to GPIOE (AIN0 is on PE3) */
@@ -139,8 +140,8 @@ int main(void)
 
     //ADC1 Config
     /* enable clocks */
-    SYSCTL_RCGCGPIO_R |= 0x10; /* enable clock to GPIOE (AIN0 is on PE3) */
-    SYSCTL_RCGCADC_R |= 2; /* enable clock to ADC0 */
+    SYSCTL_RCGCGPIO_R |= 0x10; /* enable clock to GPIOE (AIN1 is on PE2) */
+    SYSCTL_RCGCADC_R |= 2; /* enable clock to ADC1 */
     /* initialize PE2 for AIN1 input  */
     GPIO_PORTE_AFSEL_R |= 4; /* enable alternate function */
     GPIO_PORTE_DEN_R &= ~4; /* disable digital function */
@@ -150,7 +151,7 @@ int main(void)
     ADC1_EMUX_R &= ~0xF000; /* software trigger conversion */
     ADC1_SSMUX3_R = 1; /* get input from channel 1 */
     ADC1_SSCTL3_R |= 6; /* take one sample at a time, set flag at 1st sample */
-    ADC1_ACTSS_R |= 8; /* enable ADC0 sequencer 3 */
+    ADC1_ACTSS_R |= 8; /* enable ADC1 sequencer 3 */
     //End ADC1 Config
 
     //Read from ADC1
@@ -159,7 +160,7 @@ int main(void)
         ; /* wait for conversion complete */
     voltage = ADC1_SSFIFO3_R; /* read conversion result */
     ADC1_ISC_R = 8; /* clear completion flag */
-    
+
     //Calculate initial require_rpm
     require_rpm = 2400*(voltage/4095);
     //Initial error percent
@@ -172,14 +173,14 @@ int main(void)
     ui32Period = SysCtlClockGet() / 0.5;
     //Set Timer_0A to the above frequency.
     TimerLoadSet(TIMER0_BASE, TIMER_A, ui32Period - 1);
-    
+
     //Read ADC0
     ADC0_PSSI_R |= 8; /* start a conversion sequence 3 */
     while ((ADC0_RIS_R & 0x08) == 0)
         ; /* wait for conversion complete */
     result = ADC0_SSFIFO3_R; /* read conversion result */
     ADC0_ISC_R = 8; /* clear completion flag */
-    
+
     if (result > 2000)
     {
         initial_signal_value = 0;
@@ -194,7 +195,7 @@ int main(void)
     while (1)
     {
         //Reset RPM value if the fan stop.
-        if (ui8Adjust >= 750 && rpm < 300)
+        if (ui8Adjust >= 704 && rpm < 200)
         {
             rpm = 0;
             rounded = 0;
@@ -239,8 +240,9 @@ int main(void)
             comparision_sensor_value = 1;
         }
         //Edge detected
-        if (comparision_sensor_value != initial_signal_value)
+        if ((comparision_sensor_value != initial_signal_value))
         {
+            start_again = 0;
             if (count == 0)
             {
                 TimerEnable(TIMER0_BASE, TIMER_A);
@@ -264,12 +266,30 @@ int main(void)
                     rpmSum = 0;
                 }
                 //Set ui8adjust
+                if (require_rpm < 800)
+                {
+                    kp = 0.02;
+                }
+                if (require_rpm < 400)
+                {
+                    kp = 0.015;
+                }
+                if (require_rpm < 200)
+                {kp = 0.012;}
+                else if (require_rpm > 800)
+                {
+                    kp = 0.05;
+                }
                 error = ((require_rpm - rpmAvg) / 2400) * 1000;
                 error *= kp;
                 ui8Adjust = ui8Adjust - error;
                 if (require_rpm >= 2390)
                 {
                     ui8Adjust = 100;
+                }
+                if (require_rpm <= 10)
+                {
+                    ui8Adjust = 1000;
                 }
                 if (ui8Adjust < 100)
                 {
@@ -295,6 +315,25 @@ int main(void)
         }
         //Percent error duh
         error_percent = abs(100 * ((require_rpm - rpm) / require_rpm));
+        if ((rpmAvg == 0) & (require_rpm >=30))
+        {
+            error = ((require_rpm - rpmAvg) / 2400) * 1000;
+            error *= 0.01;
+            ui8Adjust = ui8Adjust - error;
+            if (require_rpm >= 2390)
+            {
+                ui8Adjust = 100;
+            }
+            if (ui8Adjust < 100)
+            {
+                ui8Adjust = 100;
+            }
+            if (ui8Adjust > 1000)
+            {
+                ui8Adjust = 1000;
+            }
+            PWMPulseWidthSet(PWM1_BASE, PWM_OUT_0, ui8Adjust * ui32Load / 1000);
+        }
         //Percent duty circle
         duty = 100 - 100 * ((ui8Adjust * ui32Load / 1000) / (ui32Load));
         //Break RPM into digits
